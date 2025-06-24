@@ -235,13 +235,29 @@
       renderMaterials();
     });
 
-    // BOM form submission
+    // BOM form submission with validation
     document.addEventListener('submit', e => {
       if (e.target && e.target.id === 'addBOMItemForm') {
         e.preventDefault();
-        const compId = parseInt(document.getElementById('compSelect').value, 10);
-        const qty = parseInt(document.getElementById('compQty').value, 10);
-        const cCost = parseFloat(document.getElementById('compCost').value);
+        const compSelectEl = document.getElementById('compSelect');
+        const compVal = compSelectEl.value;
+        if (!compVal || compVal === 'new') {
+          alert('Please select or create a valid component.');
+          return;
+        }
+        const compId = parseInt(compVal, 10);
+        const qtyEl = document.getElementById('compQty');
+        const costEl = document.getElementById('compCost');
+        const qty = parseInt(qtyEl.value, 10);
+        const cCost = parseFloat(costEl.value);
+        if (isNaN(qty) || qty <= 0) {
+          alert('Enter a valid quantity.');
+          return;
+        }
+        if (isNaN(cCost) || cCost < 0) {
+          alert('Enter a valid cost.');
+          return;
+        }
         let bom = Object.values(boms).find(b => b.parentMaterialId === currentMaterialId);
         if (!bom) {
           bom = { bomId: nextBOMId++, parentMaterialId: currentMaterialId, items: [] };
