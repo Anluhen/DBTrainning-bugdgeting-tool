@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BOM Viewer</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 0; padding: 0; display: flex; height: 100vh; }
+    #sidebar { width: 250px; background: #f4f4f4; padding: 1rem; box-sizing: border-box; overflow-y: auto; }
+    #main { flex: 1; padding: 1rem; box-sizing: border-box; overflow-y: auto; }
+    h2 { margin-top: 0; }
+    ul { list-style: none; padding: 0; }
+    li { padding: 0.5rem; cursor: pointer; }
+    li:hover { background: #ddd; }
+    table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+    th, td { border: 1px solid #ccc; padding: 0.5rem; text-align: left; }
+    form { margin-top: 1rem; }
+    form input, form select { margin-right: 0.5rem; margin-top: 0.5rem; }
+    .breadcrumb { margin-bottom: 1rem; }
+    .breadcrumb span { cursor: pointer; color: blue; text-decoration: underline; }
+    .total-cost { margin-top: 0.5rem; font-weight: bold; }
+    #newMaterialFields { margin-top: 0.5rem; }
+  </style>
+</head>
+<body>
+  <div id="sidebar">
+    <h2>Materials</h2>
+    <ul id="materialsList"></ul>
+    <button id="showAddMaterial">+ Add Material</button>
+    <form id="addMaterialForm" style="display:none; margin-top:1rem;">
+      <input type="text" id="newMatDesc" placeholder="Description" required />
+      <input type="number" id="newMatCost" placeholder="Cost" step="0.01" required />
+      <button type="submit">Add</button>
+      <button type="button" id="cancelAddMat">Cancel</button>
+    </form>
+  </div>
+  <div id="main">
+    <div class="breadcrumb" id="breadcrumb"></div>
+    <div id="bomContainer">
+      <p>Select a material to view its Bill of Materials.</p>
+    </div>
+  </div>
+
+  <script>
+    // Default initial data
+    let materials = {
+      1: { id: 1, description: 'Car', cost: 0 },
+      2: { id: 2, description: 'Frame', cost: 2000.00 },
+      3: { id: 3, description: 'Engine', cost: 0 },
+      4: { id: 4, description: 'Piston', cost: 250.00 },
+      5: { id: 5, description: 'Valve', cost: 75.00 }
+    };
+    let boms = {
+      1: { bomId: 1, parentMaterialId: 1, items: [
+        { componentId: 2, quantity: 1, cost: 2000.00 },
+        { componentId: 3, quantity: 1, cost: 5000.00 }
+      ]},
+      2: { bomId: 2, parentMaterialId: 3, items: [
+        { componentId: 4, quantity: 4, cost: 250.00 },
+        { componentId: 5, quantity: 16, cost: 75.00 }
+      ]}
+    };
+    let nextMatId = 6;
+    let nextBOMId = 3;
+    let currentMaterialId = null;
+
+    // LocalStorage helpers
+    function loadData() {
+      const savedMaterials = localStorage.getItem('materials');
+      const savedBoms = localStorage.getItem('boms');
+      const savedNextMat = localStorage.getItem('nextMatId');
+      const savedNextBom = localStorage.getItem('nextBOMId');
+      if (savedMaterials) materials = JSON.parse(savedMaterials);
+      if (savedBoms) boms = JSON.parse(savedBoms);
+      if (savedNextMat) nextMatId = parseInt(savedNextMat, 10);
+      if (savedNextBom) nextBOMId = parseInt(savedNextBom, 10);
+    }
+
+    function saveData() {
+      localStorage.setItem('materials', JSON.stringify(materials));
+      localStorage.setItem('boms', JSON.stringify(boms));
+      localStorage.setItem('nextMatId', nextMatId);
+      localStorage.setItem('nextBOMId', nextBOMId);
+    }
+
+    // DOM elements
+    const materialsList = document.getElementById('materialsList');
+    const bomContainer = document.getElementById('bomContainer');
+    const breadcrumb = document.getElementById('breadcrumb');
+    const showAddMatBtn = document.getElementById('showAddMaterial');
+    const addMatForm = document.getElementById('addMaterialForm');
+    const cancelAddMat = document.getElementById('cancelAddMat');
+
+    function renderMaterials() {
+      materialsList.innerHTML = '';
+      Object.values(materials).forEach(mat => {
+        const li = document.createElement('li');
+        li.textContent = `${mat.description} (${mat.cost.toFixed(2)})`;
+        li.dataset.id = mat.id;
+        li.addEventListener('click', () => selectMaterial(mat.id));
+        materialsList.appendChild(li);
+      });
+    }
+
+    function selectMaterial(id) {
+      currentMaterialId = id;
+      renderBreadcrumb();
+      renderBOM(id);
+    }
+
+    function renderBreadcrumb() {
+      breadcrumb.innerHTML = `<span onclick="clearSelection()">Materials</span> &gt; ${materials[currentMaterialId].description}`;
+    }
+    window.clearSelection = () => {
+      currentMaterialId = null;
+      breadcrumb.innerHTML = '';
+      bomContainer.innerHTML = '<p>Select a material to view its Bill of Materials.</p>';
+    };
+
+    function renderBOM(id) {
+      const bom = Object.values(boms).find(b => b.parentMaterialId == id);
+      if (!bom) {
+        bomContainer.innerHTML = '<p>No BOM defined for this material.</p>' + addBOMForm();
+        updateMaterialCost(id);
+        attachBOMHandlers();
+        return;
+      }
+      let total = 0;
+      let html = '<h2>BOM for ' + materials[id].description + '</h2>';
+      html += '<table><thead><tr><th>Component</th><th>Qty</th><th>Cost</th></tr></thead><tbody>';
+      bom.items.forEach(item => {
+        const lineCost = item.quantity * item.cost;
+        total += lineCost;
+        html += `<tr><td class=\"comp\" data-id=\"${item.componentId}\">${materials[item.componentId].description}</td>`;
+        html += `<td>${item.quantity}</td><td>${lineCost.toFixed(2)}</td></tr>`;
+      });
+      html += '</tbody></table>';
+      html += `<div class=\"total-cost\">Total Cost: ${total.toFixed(2)}</div>`;
+      html += addBOMForm();
+      bomContainer.innerHTML = html;
+
+      // Update and persist cost
+      materials[id].cost = total;
+      saveData();
+      renderMaterials();
+
+      document.querySelectorAll('.comp').forEach(td => {
+        td.style.cursor = 'pointer';
+        td.addEventListener('click', () => selectMaterial(parseInt(td.dataset.id, 10)));
+      });
+      attachBOMHandlers();
+    }
+
+    function updateMaterialCost(id) {
+      const bom = Object.values(boms).find(b => b.parentMaterialId == id);
+      if (!bom) return;
+      let total = 0;
+      bom.items.forEach(item => total += item.quantity * item.cost);
+      materials[id].cost = total;
+      saveData();
+      renderMaterials();
+    }
+
+    function addBOMForm() {
+      let options = '<option disabled selected value="">-- select component --</option>';
+      Object.values(materials).forEach(mat => {
+        options += `<option value=\"${mat.id}\">${mat.description}</option>`;
+      });
+      options += '<option value=\"new\">+ New material...</option>';
+      return `
+        <form id=\"addBOMItemForm\">
+          <h3>Add Component</h3>
+          <select id=\"compSelect\">${options}</select>
+          <div id=\"newMaterialFields\" style=\"display:none;\">
+            <input type=\"text\" id=\"newCompDesc\" placeholder=\"New material desc\" />
+            <input type=\"number\" id=\"newCompCost\" placeholder=\"New material cost\" step=\"0.01\" />
+            <button type=\"button\" id=\"createNewCompBtn\">Create</button>
+          </div>
+          <input type=\"number\" id=\"compQty\" placeholder=\"Qty\" required />
+          <input type=\"number\" id=\"compCost\" placeholder=\"Cost\" step=\"0.01\" required />
+          <button type=\"submit\">Add to BOM</button>
+        </form>
+      `;
+    }
+
+    // Attach handlers for dynamic BOM form
+    function attachBOMHandlers() {
+      const compSelect = document.getElementById('compSelect');
+      const newFields = document.getElementById('newMaterialFields');
+      const createBtn = document.getElementById('createNewCompBtn');
+      if (!compSelect) return;
+      compSelect.addEventListener('change', () => {
+        if (compSelect.value === 'new') {
+          newFields.style.display = 'block';
+        } else {
+          newFields.style.display = 'none';
+        }
+      });
+      createBtn.addEventListener('click', () => {
+        const desc = document.getElementById('newCompDesc').value.trim();
+        const cost = parseFloat(document.getElementById('newCompCost').value);
+        if (!desc || isNaN(cost)) return;
+        materials[nextMatId] = { id: nextMatId, description: desc, cost };
+        const newId = nextMatId;
+        nextMatId++;
+        saveData();
+        renderMaterials();
+        // refresh form
+        document.getElementById('compSelect').insertAdjacentHTML('beforeend', `<option value=\"${newId}\">${desc}</option>`);
+        compSelect.value = newId;
+        newFields.style.display = 'none';
+      });
+    }
+
+    // Event handlers for sidebar
+    showAddMatBtn.addEventListener('click', () => {
+      addMatForm.style.display = 'block';
+      showAddMatBtn.style.display = 'none';
+    });
+    cancelAddMat.addEventListener('click', () => {
+      addMatForm.reset();
+      addMatForm.style.display = 'none';
+      showAddMatBtn.style.display = 'block';
+    });
+    addMatForm.addEventListener('submit', e => {
+      e.preventDefault();
+      const desc = document.getElementById('newMatDesc').value.trim();
+      const cost = parseFloat(document.getElementById('newMatCost').value);
+      materials[nextMatId] = { id: nextMatId, description: desc, cost };
+      nextMatId++;
+      saveData();
+      addMatForm.reset();
+      addMatForm.style.display = 'none';
+      showAddMatBtn.style.display = 'block';
+      renderMaterials();
+    });
+
+    // BOM form submission
+    document.addEventListener('submit', e => {
+      if (e.target && e.target.id === 'addBOMItemForm') {
+        e.preventDefault();
+        const compId = parseInt(document.getElementById('compSelect').value, 10);
+        const qty = parseInt(document.getElementById('compQty').value, 10);
+        const cCost = parseFloat(document.getElementById('compCost').value);
+        let bom = Object.values(boms).find(b => b.parentMaterialId === currentMaterialId);
+        if (!bom) {
+          bom = { bomId: nextBOMId++, parentMaterialId: currentMaterialId, items: [] };
+          boms[bom.bomId] = bom;
+        }
+        bom.items.push({ componentId: compId, quantity: qty, cost: cCost });
+        saveData();
+        renderBOM(currentMaterialId);
+      }
+    });
+
+    // Initialize
+    loadData();
+    renderMaterials();
+  </script>
+</body>
+</html>
