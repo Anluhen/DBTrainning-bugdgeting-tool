@@ -1,201 +1,384 @@
-
-// Data structures
-let materials = {
-    1: { id: 1, description: 'Car', baseCost: 0 },
-    2: { id: 2, description: 'Frame', baseCost: 2000 },
-    3: { id: 3, description: 'Engine', baseCost: 0 },
-    4: { id: 4, description: 'Piston', baseCost: 250 },
-    5: { id: 5, description: 'Valve', baseCost: 75 }
-};
-let boms = {
-    1: {
-        parentMaterialId: 1, items: [
-            { componentId: 2, quantity: 1, cost: 2000 },
-            { componentId: 3, quantity: 1, cost: 5000 }
-        ]
-    },
-    3: {
-        parentMaterialId: 3, items: [
-            { componentId: 4, quantity: 4, cost: 250 },
-            { componentId: 5, quantity: 16, cost: 75 }
-        ]
-    }
-};
-let costOverrides = {};
-let nextMatId = 6, nextBOMId = 3, currentMaterialId = null;
-
-// Persistence
-function loadData() {
-    const m = localStorage.getItem('materials');
-    const bm = localStorage.getItem('boms');
-    const co = localStorage.getItem('costOverrides');
-    const nm = localStorage.getItem('nextMatId');
-    if (m) materials = JSON.parse(m);
-    if (bm) boms = JSON.parse(bm);
-    if (co) costOverrides = JSON.parse(co);
-    if (nm) nextMatId = +nm;
-}
-function saveData() {
-    localStorage.setItem('materials', JSON.stringify(materials));
-    localStorage.setItem('boms', JSON.stringify(boms));
-    localStorage.setItem('costOverrides', JSON.stringify(costOverrides));
-    localStorage.setItem('nextMatId', nextMatId);
-}
-
-// Compute cost utilities
-function getComputedCost(id) {
-    const bomObj = boms[id];
-    if (!bomObj || bomObj.items.length === 0) return null;
-    return bomObj.items.reduce((sum, it) => sum + it.quantity * it.cost, 0);
-}
-function getMaterialCost(id) {
-    const comp = getComputedCost(id);
-    if (comp != null) return costOverrides[id] != null ? costOverrides[id] : comp;
-    return materials[id].baseCost;
-}
-
-// DOM refs
-const materialsList = document.getElementById('materialsList');
-const bomContainer = document.getElementById('bomContainer');
-const breadcrumb = document.getElementById('breadcrumb');
-const showAddMatBtn = document.getElementById('showAddMaterial');
-const addMatForm = document.getElementById('addMaterialForm');
-const cancelAddMat = document.getElementById('cancelAddMat');
-const addMatSubmit = document.getElementById('addMatSubmit');
-
-// Render sidebar
-function renderMaterials() {
-    materialsList.innerHTML = '';
-    Object.values(materials).forEach(m => {
-        const li = document.createElement('li');
-        li.textContent = `${m.description} (${getMaterialCost(m.id).toFixed(2)})`;
-        li.addEventListener('click', () => selectMaterial(m.id));
-        materialsList.appendChild(li);
-    });
-}
-
-// Select material
-function selectMaterial(id) {
-    currentMaterialId = id;
-    breadcrumb.innerHTML = `<span onclick=\"clearSelection()\">Materials</span> > ${materials[id].description} `;
-    renderBOM(id);
-}
-window.clearSelection = () => {
-    currentMaterialId = null;
-    breadcrumb.innerHTML = '';
-    bomContainer.innerHTML = '<p>Select a material to view its Bill of Materials.</p>';
+/*************************************************************
+* 1) DATA LAYER: load/save from localStorage, init sample data
+*************************************************************/
+const KEYS = {
+    projects: 'projects',
+    parts: 'parts',
+    pieces: 'pieces',
+    projParts: 'projectParts',
+    partParts: 'partParts',
+    partPieces: 'partPieces'
 };
 
-// Render BOM
-function renderBOM(id) {
-    const bomObj = boms[id] || { items: [] };
-    const items = bomObj.items;
-    const computed = getComputedCost(id);
-    const displayCost = getMaterialCost(id);
+function lsLoad(k, def) {
+    const v = localStorage.getItem(k);
+    if (v) return JSON.parse(v);
+    localStorage.setItem(k, JSON.stringify(def));
+    return def;
+}
+function lsSave(k, arr) {
+    localStorage.setItem(k, JSON.stringify(arr));
+}
 
-    let html = `< h2 > BOM for ${materials[id].description}</h2 > `;
-    html += `< div id =\"costControls\">Cost: <input id=\"materialCostInput\" type=\"number\" step=\"0.01\" value=\"${displayCost.toFixed(2)}\" />`;
-    if (computed != null) html += `<button id=\"resetCostBtn\">Reset</button>`;
-    html += `</div>`;
+// initialize on first load
+let projects = lsLoad(KEYS.projects, [
+    { project_id: 1, name: 'Solar Powerplant', description: 'Utility-scale PV site' }
+]);
+let parts = lsLoad(KEYS.parts, [
+    { part_id: 10, name: 'Solar Farm', description: 'PV field' },
+    { part_id: 11, name: 'Substation', description: 'Step-up transformers' },
+    { part_id: 12, name: 'Control Room', description: 'SCADA & relays' },
+    { part_id: 20, name: 'Modules', description: 'PV modules' },
+    { part_id: 21, name: 'Structures', description: 'Mounting structures' },
+    { part_id: 22, name: 'Inverters', description: 'Inverter units' },
+    { part_id: 23, name: 'Electrical Wiring', description: 'Cables & connectors' }
+]);
+let pieces = lsLoad(KEYS.pieces, [
+    { piece_id: 100, name: 'Photovoltaic Module', description: '330W panel' },
+    { piece_id: 101, name: 'Metal Beam', description: 'Steel I-beam' },
+    { piece_id: 102, name: 'Mounting Bracket', description: 'Galvanized part' },
+    { piece_id: 103, name: 'Cable', description: 'DC cable' },
+    { piece_id: 104, name: 'Connector', description: 'MC4 connector' },
+    { piece_id: 105, name: 'Inverter Unit', description: '50kW inverter' }
+]);
+let projectParts = lsLoad(KEYS.projParts, [
+    { project_id: 1, part_id: 10, quantity: 1 },
+    { project_id: 1, part_id: 11, quantity: 1 },
+    { project_id: 1, part_id: 12, quantity: 1 }
+]);
+let partParts = lsLoad(KEYS.partParts, [
+    { parent_part_id: 10, child_part_id: 20, quantity: 1 },
+    { parent_part_id: 10, child_part_id: 21, quantity: 1 },
+    { parent_part_id: 10, child_part_id: 22, quantity: 1 },
+    { parent_part_id: 10, child_part_id: 23, quantity: 1 }
+]);
+let partPieces = lsLoad(KEYS.partPieces, [
+    { part_id: 20, piece_id: 100, quantity: 5000 },
+    { part_id: 21, piece_id: 101, quantity: 1000 },
+    { part_id: 21, piece_id: 102, quantity: 5000 },
+    { part_id: 22, piece_id: 105, quantity: 20 },
+    { part_id: 23, piece_id: 103, quantity: 20000 },
+    { part_id: 23, piece_id: 104, quantity: 5000 }
+]);
 
-    html += '<table><thead><tr><th>Component</th><th>Qty</th><th>Unit Cost</th><th>Line Cost</th><th>Action</th></tr></thead><tbody>';
-    items.forEach((it, idx) => {
-        const line = it.quantity * it.cost;
-        html += `<tr>` +
-            `<td data-id=\"${it.componentId}\">${materials[it.componentId].description}</td>` +
-            `<td><input data-idx=\"${idx}\" data-field=\"quantity\" type=\"number\" value=\"${it.quantity}\" /></td>` +
-            `<td><input data-idx=\"${idx}\" data-field=\"cost\" type=\"number\" step=\"0.01\" value=\"${it.cost}\" /></td>` +
-            `<td>${line.toFixed(2)}</td>` +
-            `<td><button class=\"delete-btn\" data-idx=\"${idx}\">Delete</button></td>` +
-            `</tr>`;
+/*************************************************************
+ * 2) TABLE GENERATOR: builds an HTML table + filter/sort/form
+ *************************************************************/
+function buildTable(cfg) {
+    // cfg = { columns:[{key,label}], rows:[obj], onRowClick?, onAdd? }
+    const wrap = document.createElement('div');
+    const tbl = document.createElement('table');
+    const thead = document.createElement('thead');
+    const tr = document.createElement('tr');
+
+    // headers + filters
+    cfg.columns.forEach(col => {
+        const th = document.createElement('th');
+        th.textContent = col.label;
+        let asc = true;
+        th.onclick = () => {
+            cfg.rows.sort((a, b) => {
+                if (a[col.key] < b[col.key]) return asc ? -1 : 1;
+                if (a[col.key] > b[col.key]) return asc ? 1 : -1;
+                return 0;
+            });
+            asc = !asc;
+            renderAllActive();  // re-render current screen
+        };
+        // filter input
+        const inp = document.createElement('input');
+        inp.className = 'filter';
+        inp.placeholder = 'filter';
+        inp.oninput = () => {
+            const val = inp.value.toLowerCase();
+            // toggle row visibilities
+            Array.from(tbl.tBodies[0].rows).forEach(row => {
+                const cell = row.cells[cfg.columns.indexOf(col)];
+                row.style.display = cell.textContent.toLowerCase().includes(val)
+                    ? '' : 'none';
+            });
+        };
+        th.appendChild(document.createElement('br'));
+        th.appendChild(inp);
+        tr.appendChild(th);
     });
-    // Add-row
-    html += `<tr class=\"add-row\"><td><input id=\"newDesc\" placeholder=\"Component desc\" /></td>` +
-        `<td><input id=\"newQty\" type=\"number\" placeholder=\"Qty\" /></td>` +
-        `<td><input id=\"newUnitCost\" type=\"number\" step=\"0.01\" placeholder=\"Unit cost\" /></td>` +
-        `<td></td><td><button id=\"addRowBtn\">Add</button></td></tr>`;
-    html += '</tbody></table>';
-    if (computed != null) html += `<div class=\"total-cost\">Total Cost of BOM: ${computed.toFixed(2)}</div>`;
+    thead.appendChild(tr);
+    tbl.appendChild(thead);
 
-    bomContainer.innerHTML = html;
-
-    // Cost input handler
-    document.getElementById('materialCostInput').addEventListener('change', e => {
-        const val = parseFloat(e.target.value);
-        if (isNaN(val) || val < 0) { alert('Enter valid cost'); e.target.value = displayCost.toFixed(2); return; }
-        if (computed != null) costOverrides[id] = val;
-        else materials[id].baseCost = val;
-        saveData(); renderMaterials();
-    });
-    const resetBtn = document.getElementById('resetCostBtn');
-    if (resetBtn) resetBtn.addEventListener('click', () => { delete costOverrides[id]; saveData(); renderBOM(id); });
-
-    // Item change handlers
-    bomContainer.querySelectorAll('input[data-field]').forEach(inp => {
-        inp.addEventListener('change', e => {
-            const idx = +e.target.dataset.idx;
-            const field = e.target.dataset.field;
-            const val = field === 'quantity' ? parseInt(e.target.value, 10) : parseFloat(e.target.value);
-            if (isNaN(val) || val < 0) { alert('Invalid value'); renderBOM(id); return; }
-            items[idx][field] = val;
-            saveData(); renderBOM(id);
+    // body
+    const tbody = document.createElement('tbody');
+    cfg.rows.forEach(r => {
+        const row = document.createElement('tr');
+        if (cfg.onRowClick) {
+            row.classList.add('clickable');
+            row.onclick = () => cfg.onRowClick(r);
+        }
+        cfg.columns.forEach(col => {
+            const td = document.createElement('td');
+            td.textContent = r[col.key];
+            row.appendChild(td);
         });
+        tbody.appendChild(row);
     });
+    tbl.appendChild(tbody);
+    wrap.appendChild(tbl);
 
-    // Delete handlers
-    bomContainer.querySelectorAll('.delete-btn').forEach(btn => {
-        btn.addEventListener('click', e => {
-            const idx = +e.target.dataset.idx;
-            items.splice(idx, 1);
-            saveData(); renderBOM(id);
+    // add-new form
+    if (cfg.onAdd) {
+        const form = document.createElement('form');
+        form.className = 'add-row';
+        cfg.columns.forEach(col => {
+            const inp = document.createElement('input');
+            inp.name = col.key;
+            inp.placeholder = col.label;
+            form.appendChild(inp);
         });
-    });
+        const btn = document.createElement('button');
+        btn.textContent = 'Add';
+        form.appendChild(btn);
 
-    // Row click navigation
-    bomContainer.querySelectorAll('td[data-id]').forEach(td => {
-        td.addEventListener('click', () => selectMaterial(+td.dataset.id));
-    });
+        form.onsubmit = e => {
+            e.preventDefault();
+            const data = {};
+            new FormData(form).forEach((v, k) => data[k] = isNaN(v) ? v : Number(v));
+            cfg.onAdd(data);
+            // save back
+            persistAll();
+            renderAllActive();
+            form.reset();
+        };
+        wrap.appendChild(form);
+    }
 
-    // Add row handler
-    document.getElementById('addRowBtn').addEventListener('click', () => {
-        const desc = document.getElementById('newDesc').value.trim();
-        const qty = parseInt(document.getElementById('newQty').value, 10);
-        const uc = parseFloat(document.getElementById('newUnitCost').value);
-        if (!desc || isNaN(qty) || qty <= 0 || isNaN(uc) || uc < 0) { alert('Enter valid values'); return; }
-        let comp = Object.values(materials).find(m => m.description === desc);
-        if (!comp) { comp = { id: nextMatId, description: desc, baseCost: uc }; materials[nextMatId] = comp; nextMatId++; }
-        if (!boms[id]) boms[id] = { parentMaterialId: id, items: [] };
-        boms[id].items.push({ componentId: comp.id, quantity: qty, cost: uc });
-        saveData(); renderBOM(id);
-    });
+    return wrap;
 }
 
-// Sidebar add material handlers
-showAddMatBtn.addEventListener('click', () => {
-    addMatForm.style.display = 'block';
-    showAddMatBtn.style.display = 'none';
-});
-cancelAddMat.addEventListener('click', () => {
-    addMatForm.reset();
-    addMatForm.style.display = 'none';
-    showAddMatBtn.style.display = 'block';
-});
-addMatSubmit.addEventListener('click', () => {
-    const desc = document.getElementById('newMatDesc').value.trim();
-    const cost = parseFloat(document.getElementById('newMatCost').value);
-    if (desc && !isNaN(cost)) {
-        materials[nextMatId] = { id: nextMatId, description: desc, baseCost: cost };
-        nextMatId++;
-        saveData();
-        renderMaterials();
-    } else {
-        alert('Please enter valid project details.');
-    }
-    addMatForm.reset();
-    addMatForm.style.display = 'none';
-    showAddMatBtn.style.display = 'block';
-});
+function persistAll() {
+    lsSave(KEYS.projects, projects);
+    lsSave(KEYS.parts, parts);
+    lsSave(KEYS.pieces, pieces);
+    lsSave(KEYS.projParts, projectParts);
+    lsSave(KEYS.partParts, partParts);
+    lsSave(KEYS.partPieces, partPieces);
+}
 
-// Initialize
-loadData();
-renderMaterials();
+/*************************************************************
+ * 3) SCREEN RENDERERS
+ *************************************************************/
+function renderProjects() {
+    const cols = [
+        { key: 'project_id', label: 'ID' },
+        { key: 'name', label: 'Name' },
+        { key: 'description', label: 'Description' },
+    ];
+    const container = document.getElementById('tbl-projects');
+    container.innerHTML = '';
+    container.append(
+        buildTable({
+            columns: cols,
+            rows: projects,
+            onRowClick: p => showScreen('project-detail', p),
+            onAdd: p => {
+                p.project_id = projects.length
+                    ? Math.max(...projects.map(x => x.project_id)) + 1 : 1;
+                projects.push(p);
+                projectParts.push({ project_id: p.project_id, part_id: 0, quantity: 1 });
+            }
+        })
+    );
+}
+
+function renderParts() {
+    const cols = [
+        { key: 'part_id', label: 'ID' },
+        { key: 'name', label: 'Name' },
+        { key: 'description', label: 'Description' },
+    ];
+    const container = document.getElementById('tbl-parts');
+    container.innerHTML = '';
+    container.append(
+        buildTable({
+            columns: cols,
+            rows: parts,
+            onRowClick: p => showScreen('part-detail', p),
+            onAdd: p => {
+                p.part_id = parts.length
+                    ? Math.max(...parts.map(x => x.part_id)) + 1 : 1;
+                parts.push(p);
+            }
+        })
+    );
+}
+
+function renderPieces() {
+    const cols = [
+        { key: 'piece_id', label: 'ID' },
+        { key: 'name', label: 'Name' },
+        { key: 'description', label: 'Description' },
+    ];
+    const container = document.getElementById('tbl-pieces');
+    container.innerHTML = '';
+    container.append(
+        buildTable({
+            columns: cols,
+            rows: pieces,
+            onAdd: pi => {
+                pi.piece_id = pieces.length
+                    ? Math.max(...pieces.map(x => x.piece_id)) + 1 : 1;
+                pieces.push(pi);
+            }
+        })
+    );
+}
+
+function renderProjectDetail(proj) {
+    document.getElementById('project-detail-title')
+        .textContent = `Project: ${proj.name} (#${proj.project_id})`;
+
+    // PARTS in this project
+    const colsP = [
+        { key: 'part_id', label: 'Part ID' },
+        { key: 'name', label: 'Name' },
+        { key: 'quantity', label: 'Qty' }
+    ];
+    const rowsP = projectParts
+        .filter(pp => pp.project_id === proj.project_id)
+        .map(pp => {
+            const p = parts.find(x => x.part_id === pp.part_id) || {};
+            return { part_id: pp.part_id, name: p.name || '—', quantity: pp.quantity };
+        });
+
+    const divP = document.getElementById('tbl-project-parts');
+    divP.innerHTML = '';
+    divP.append(
+        buildTable({
+            columns: colsP,
+            rows: rowsP,
+            onRowClick: r => showScreen('part-detail', parts.find(x => x.part_id === r.part_id)),
+            onAdd: pp => {
+                projectParts.push({
+                    project_id: proj.project_id,
+                    part_id: pp.part_id,
+                    quantity: pp.quantity
+                });
+            }
+        })
+    );
+
+    // PIECES directly in this project (if any) – normally none by design
+    const colsPi = [
+        { key: 'piece_id', label: 'Piece ID' },
+        { key: 'name', label: 'Name' },
+        { key: 'quantity', label: 'Qty' }
+    ];
+    const rowsPi = []; // our model doesn’t attach pieces directly to projects
+    const divPi = document.getElementById('tbl-project-pieces');
+    divPi.innerHTML = '';
+    divPi.append(
+        buildTable({
+            columns: colsPi,
+            rows: rowsPi
+        })
+    );
+}
+
+function renderPartDetail(part) {
+    document.getElementById('part-detail-title')
+        .textContent = `Part: ${part.name} (#${part.part_id})`;
+
+    // CHILD PARTS
+    const colsPP = [
+        { key: 'child_part_id', label: 'Child Part ID' },
+        { key: 'name', label: 'Name' },
+        { key: 'quantity', label: 'Qty' }
+    ];
+    const rowsPP = partParts
+        .filter(pp => pp.parent_part_id === part.part_id)
+        .map(pp => {
+            const c = parts.find(x => x.part_id === pp.child_part_id) || {};
+            return {
+                child_part_id: pp.child_part_id,
+                name: c.name || '—',
+                quantity: pp.quantity
+            };
+        });
+    const divPP = document.getElementById('tbl-child-parts');
+    divPP.innerHTML = '';
+    divPP.append(
+        buildTable({
+            columns: colsPP,
+            rows: rowsPP,
+            onRowClick: r => showScreen('part-detail',
+                parts.find(x => x.part_id === r.child_part_id)),
+            onAdd: np => {
+                partParts.push({
+                    parent_part_id: part.part_id,
+                    child_part_id: np.child_part_id,
+                    quantity: np.quantity
+                });
+            }
+        })
+    );
+
+    // PIECES in this part
+    const colsPi = [
+        { key: 'piece_id', label: 'Piece ID' },
+        { key: 'name', label: 'Name' },
+        { key: 'quantity', label: 'Qty' }
+    ];
+    const rowsPi = partPieces
+        .filter(pp => pp.part_id === part.part_id)
+        .map(pp => {
+            const pc = pieces.find(x => x.piece_id === pp.piece_id) || {};
+            return {
+                piece_id: pp.piece_id,
+                name: pc.name || '—',
+                quantity: pp.quantity
+            };
+        });
+    const divPi = document.getElementById('tbl-part-pieces');
+    divPi.innerHTML = '';
+    divPi.append(
+        buildTable({
+            columns: colsPi,
+            rows: rowsPi,
+            onAdd: np => {
+                partPieces.push({
+                    part_id: part.part_id,
+                    piece_id: np.piece_id,
+                    quantity: np.quantity
+                });
+            }
+        })
+    );
+}
+
+/*************************************************************
+ * 4) SPA ROUTING
+ *************************************************************/
+let pendingParam = null;
+function showScreen(name, param) {
+    // hide all
+    document.querySelectorAll('.screen').forEach(d => d.classList.remove('active'));
+    // show target
+    document.getElementById(name).classList.add('active');
+    // remember param for detail screens
+    pendingParam = param;
+    // render
+    renderAllActive();
+}
+function renderAllActive() {
+    if (document.getElementById('projects').classList.contains('active'))
+        return renderProjects();
+    if (document.getElementById('parts').classList.contains('active'))
+        return renderParts();
+    if (document.getElementById('pieces').classList.contains('active'))
+        return renderPieces();
+    if (document.getElementById('project-detail').classList.contains('active'))
+        return renderProjectDetail(pendingParam);
+    if (document.getElementById('part-detail').classList.contains('active'))
+        return renderPartDetail(pendingParam);
+}
+
+// initial
+showScreen('projects');

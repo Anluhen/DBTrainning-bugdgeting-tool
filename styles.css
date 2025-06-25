@@ -1,114 +1,54 @@
     body {
-        font-family: Arial, sans-serif;
-        margin: 0;
-        padding: 0;
-        display: flex;
-        height: 100vh;
+        font-family: sans-serif;
+        margin: 20px;
     }
 
-    #sidebar {
-        width: 250px;
-        background: #f4f4f4;
-        padding: 1rem;
-        box-sizing: border-box;
-        overflow-y: auto;
+    nav button {
+        margin-right: 8px;
     }
 
-    #main {
-        flex: 1;
-        padding: 1rem;
-        box-sizing: border-box;
-        overflow-y: auto;
+    .screen {
+        display: none;
     }
 
-    h2 {
-        margin-top: 0;
-    }
-
-    ul {
-        list-style: none;
-        padding: 0;
-    }
-
-    li {
-        padding: 0.5rem;
-        cursor: pointer;
-    }
-
-    li:hover {
-        background: #ddd;
+    .active {
+        display: block;
     }
 
     table {
-        width: 100%;
         border-collapse: collapse;
-        margin-top: 1rem;
+        width: 100%;
+        margin-top: 12px;
     }
 
     th,
     td {
         border: 1px solid #ccc;
-        padding: 0.5rem;
-        text-align: left;
+        padding: 6px 8px;
     }
 
-    td input {
+    th {
+        background: #f0f0f0;
+        position: relative;
+        cursor: pointer;
+    }
+
+    th .filter {
+        display: block;
+        margin-top: 4px;
         width: 100%;
         box-sizing: border-box;
-        border: none;
-        background: transparent;
     }
 
-    td input:focus {
-        outline: 1px solid #007ACC;
-        background: #eef;
+    form.add-row {
+        margin-top: 12px;
     }
 
-    .breadcrumb {
-        margin-bottom: 1rem;
+    form.add-row input {
+        margin-right: 6px;
     }
 
-    .breadcrumb span {
+    tr.clickable:hover {
+        background: #f9f9f9;
         cursor: pointer;
-        color: blue;
-        text-decoration: underline;
-    }
-
-    .total-cost {
-        margin-top: 0.5rem;
-        font-weight: bold;
-    }
-
-    .delete-btn {
-        background: #e74c3c;
-        color: #fff;
-        border: none;
-        padding: 0.2rem 0.5rem;
-        cursor: pointer;
-    }
-
-    .delete-btn:hover {
-        background: #c0392b;
-    }
-
-    .add-row input {
-        width: 90%;
-        box-sizing: border-box;
-    }
-
-    .add-row button {
-        padding: 0.3rem 0.6rem;
-    }
-
-    #costControls {
-        margin-bottom: 0.5rem;
-    }
-
-    #costControls input {
-        width: 120px;
-        margin-left: 0.5rem;
-    }
-
-    #costControls button {
-        margin-left: 0.5rem;
     }

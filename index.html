@@ -1,29 +1,50 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>BOM Viewer</title>
-  <link rel="stylesheet" href="styles.css" />
+  <meta charset="UTF-8">
+  <title>Project → Parts → Pieces Explorer</title>
+  <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <div id="sidebar">
+  <nav>
+    <button onclick="showScreen('projects')">Projects</button>
+    <button onclick="showScreen('parts')">Parts</button>
+    <button onclick="showScreen('pieces')">Pieces</button>
+  </nav>
+
+  <!-- PROJECTS SCREEN -->
+  <div id="projects" class="screen">
     <h2>Projects</h2>
-    <ul id="materialsList"></ul>
-    <button id="showAddMaterial">+ Add Project</button>
-    <form id="addMaterialForm" style="display:none; margin-top:1rem;" onsubmit="return false;">
-      <input type="text" id="newMatDesc" placeholder="Description" required />
-      <input type="number" id="newMatCost" placeholder="Cost" step="0.01" required />
-      <button type="button" id="addMatSubmit">Add Projeto</button>
-      <button type="button" id="cancelAddMat">Cancel</button>
-    </form>
+    <div id="tbl-projects"></div>
   </div>
-  <div id="main">
-    <div class="breadcrumb" id="breadcrumb"></div>
-    <div id="bomContainer">
-      <p>Select a material to view its Bill of Materials.</p>
-    </div>
+
+  <!-- PARTS SCREEN -->
+  <div id="parts" class="screen">
+    <h2>All Parts</h2>
+    <div id="tbl-parts"></div>
   </div>
-</body>
+
+  <!-- PIECES SCREEN -->
+  <div id="pieces" class="screen">
+    <h2>All Pieces</h2>
+    <div id="tbl-pieces"></div>
+  </div>
+
+  <!-- PROJECT → DETAILS SCREEN -->
+  <div id="project-detail" class="screen">
+    <button onclick="showScreen('projects')">← Back to Projects</button>
+    <h2 id="project-detail-title"></h2>
+    <div id="tbl-project-parts"></div>
+    <div id="tbl-project-pieces"></div>
+  </div>
+
+  <!-- PART → DETAILS SCREEN -->
+  <div id="part-detail" class="screen">
+    <button onclick="showScreen('parts')">← Back to Parts</button>
+    <h2 id="part-detail-title"></h2>
+    <div id="tbl-child-parts"></div>
+    <div id="tbl-part-pieces"></div>
+  </div>
 <script src="script.js"></script>
+</body>
 </html>
